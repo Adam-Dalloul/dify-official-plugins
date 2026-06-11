@@ -1,5 +1,6 @@
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
@@ -22,27 +23,61 @@ from dify_plugin.entities.model.message import (
 from dify_plugin.errors.model import CredentialsValidateFailedError, InvokeError
 
 from models.llm import llm as llm_module
-from models.llm.llm import BytePlusArkLargeLanguageModel, _ArkHTTPError
+from models.llm.llm import (
+    BytePlusArkLargeLanguageModel,
+    ArkCredentials,
+    ArkHTTPError,
+    ArkObjectResponse,
+    build_chat_completion_request,
+    chat_stream_options_from_parameters,
+)
 
 
-def _model() -> BytePlusArkLargeLanguageModel:
+def make_model() -> BytePlusArkLargeLanguageModel:
     return BytePlusArkLargeLanguageModel(model_schemas=[])
 
 
-def _credentials() -> dict[str, str]:
+def credentials() -> dict[str, str]:
     return {
         "ark_api_key": "test-key",
         "api_endpoint_host": "https://ark.ap-southeast.bytepluses.com/api/v3",
     }
 
 
+@dataclass(frozen=True)
+class CapturedRequest:
+    method: str
+    path: str
+    payload: Any | None = None
+
+    @classmethod
+    def from_kwargs(cls, kwargs: dict[str, Any]) -> "CapturedRequest":
+        return cls(
+            method=kwargs["method"],
+            path=kwargs["path"],
+            payload=kwargs.get("payload"),
+        )
+
+    def payload_dict(self) -> dict[str, Any]:
+        assert self.payload is not None
+        return self.payload.to_payload()
+
+
+def provider_response(kwargs: dict[str, Any], payload: dict[str, Any]) -> Any:
+    try:
+        return kwargs["response_model"].model_validate(payload)
+    except Exception as error:
+        context = kwargs.get("response_context", "Invalid provider response")
+        raise InvokeError(f"{context}: {error}") from error
+
+
 def test_get_num_tokens_counts_text_from_multimodal_prompt() -> None:
-    model = _model()
+    model = make_model()
     prompt_text = "make a calm ocean video with detailed camera movement"
 
     token_count = model.get_num_tokens(
         model="seedance-2-0-260128",
-        credentials=_credentials(),
+        credentials=credentials(),
         prompt_messages=[
             UserPromptMessage(
                 content=[
@@ -60,8 +95,58 @@ def test_get_num_tokens_counts_text_from_multimodal_prompt() -> None:
     assert token_count == max(1, len(prompt_text) // 4)
 
 
-class _FakeResponse:
-    def __enter__(self) -> "_FakeResponse":
+def test_chat_completion_request_is_pydantic_modeled() -> None:
+    request = build_chat_completion_request(
+        model="seed-1-6-251215",
+        prompt_messages=[
+            UserPromptMessage(
+                content=[
+                    TextPromptMessageContent(data="describe this frame"),
+                    ImagePromptMessageContent(
+                        format="png",
+                        mime_type="image/png",
+                        url="https://example.com/frame.png",
+                    ),
+                ],
+            )
+        ],
+        model_parameters={"temperature": 0.5, "thinking": "disabled"},
+        tools=None,
+        stop=["done"],
+        user="user-1",
+        stream_options=chat_stream_options_from_parameters(
+            {"stream_options": {"include_usage": True}}
+        ),
+    )
+
+    assert request.to_payload() == {
+        "model": "seed-1-6-251215",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "describe this frame"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "https://example.com/frame.png",
+                            "detail": "low",
+                        },
+                    },
+                ],
+            }
+        ],
+        "temperature": 0.5,
+        "stop": ["done"],
+        "user": "user-1",
+        "thinking": {"type": "disabled"},
+        "reasoning_effort": "minimal",
+        "stream_options": {"include_usage": True},
+    }
+
+
+class FakeResponse:
+    def __enter__(self) -> "FakeResponse":
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -71,23 +156,27 @@ class _FakeResponse:
         return b'{"ok": true}'
 
 
-def test_request_json_uses_configured_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    model = _model()
+def test_request_model_uses_configured_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = make_model()
     requests = []
 
-    def fake_urlopen(request: Any, timeout: int) -> _FakeResponse:
+    def fake_urlopen(request: Any, timeout: int) -> FakeResponse:
         requests.append((request, timeout))
-        return _FakeResponse()
+        return FakeResponse()
 
     monkeypatch.setattr(llm_module, "urlopen", fake_urlopen)
 
-    response = model._request_json(
-        credentials=_credentials(),
+    response = model.request_model(
+        credentials=ArkCredentials(**credentials()),
         method="GET",
         path="images/generations",
+        response_model=ArkObjectResponse,
+        response_context="Invalid test response",
     )
 
-    assert response == {"ok": True}
+    assert response.model_extra == {"ok": True}
     assert (
         requests[0][0].full_url
         == "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations"
@@ -99,61 +188,54 @@ def test_request_json_uses_configured_endpoint(monkeypatch: pytest.MonkeyPatch) 
 def test_seedance_validate_credentials_uses_non_generation_probe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    model = _model()
-    requests: list[dict[str, Any]] = []
+    model = make_model()
+    requests: list[CapturedRequest] = []
 
-    def fake_request_json(**kwargs: Any) -> dict[str, Any]:
-        requests.append(kwargs)
-        return {"data": []}
+    def fake_request_model(**kwargs: Any) -> Any:
+        requests.append(CapturedRequest.from_kwargs(kwargs))
+        return provider_response(kwargs, {"data": []})
 
-    monkeypatch.setattr(model, "_request_json", fake_request_json)
+    monkeypatch.setattr(model, "request_model", fake_request_model)
 
-    model.validate_credentials("seedance-2-0-260128", _credentials())
+    model.validate_credentials("seedance-2-0-260128", credentials())
 
     assert requests == [
-        {
-            "credentials": _credentials(),
-            "method": "GET",
-            "path": "contents/generations/tasks?page_num=1&page_size=1",
-        }
+        CapturedRequest(
+            method="GET",
+            path="contents/generations/tasks?page_num=1&page_size=1",
+        )
     ]
 
 
 def test_seedream_validate_credentials_uses_image_probe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    model = _model()
-    requests: list[dict[str, Any]] = []
+    model = make_model()
+    requests: list[CapturedRequest] = []
 
-    def fake_request_json(**kwargs: Any) -> dict[str, Any]:
-        requests.append(kwargs)
-        raise _ArkHTTPError(405, "method not allowed")
+    def fake_request_model(**kwargs: Any) -> Any:
+        requests.append(CapturedRequest.from_kwargs(kwargs))
+        raise ArkHTTPError(405, "method not allowed")
 
-    monkeypatch.setattr(model, "_request_json", fake_request_json)
+    monkeypatch.setattr(model, "request_model", fake_request_model)
 
-    model.validate_credentials("seedream-5-0-260128", _credentials())
+    model.validate_credentials("seedream-5-0-260128", credentials())
 
-    assert requests == [
-        {
-            "credentials": _credentials(),
-            "method": "GET",
-            "path": "images/generations",
-        }
-    ]
+    assert requests == [CapturedRequest(method="GET", path="images/generations")]
 
 
 def test_polling_validate_credentials_rejects_auth_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    model = _model()
+    model = make_model()
 
-    def fake_request_json(**_: Any) -> dict[str, Any]:
-        raise _ArkHTTPError(401, "unauthorized")
+    def fake_request_model(**_: Any) -> Any:
+        raise ArkHTTPError(401, "unauthorized")
 
-    monkeypatch.setattr(model, "_request_json", fake_request_json)
+    monkeypatch.setattr(model, "request_model", fake_request_model)
 
     with pytest.raises(CredentialsValidateFailedError):
-        model.validate_credentials("seedream-5-0-260128", _credentials())
+        model.validate_credentials("seedream-5-0-260128", credentials())
 
 
 def test_live_credentials_validation() -> None:
@@ -161,7 +243,7 @@ def test_live_credentials_validation() -> None:
     if not api_key:
         pytest.skip("BYTEPLUS_API_KEY is not set")
 
-    model = _model()
+    model = make_model()
     model.validate_credentials(
         "seedance-2-0-260128",
         {
@@ -177,18 +259,18 @@ def test_live_credentials_validation() -> None:
 def test_seedance_start_polling_creates_task_without_web_search(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    model = _model()
-    requests: list[dict[str, Any]] = []
+    model = make_model()
+    requests: list[CapturedRequest] = []
 
-    def fake_request_json(**kwargs: Any) -> dict[str, Any]:
-        requests.append(kwargs)
-        return {"id": "task-1", "status": "queued"}
+    def fake_request_model(**kwargs: Any) -> Any:
+        requests.append(CapturedRequest.from_kwargs(kwargs))
+        return provider_response(kwargs, {"id": "task-1", "status": "queued"})
 
-    monkeypatch.setattr(model, "_request_json", fake_request_json)
+    monkeypatch.setattr(model, "request_model", fake_request_model)
 
     result = model._start_polling(
         model="seedance-2-0-260128",
-        credentials=_credentials(),
+        credentials=credentials(),
         prompt_messages=[
             UserPromptMessage(
                 content=[
@@ -213,9 +295,9 @@ def test_seedance_start_polling_creates_task_without_web_search(
         "model": "seedance-2-0-260128",
         "platform": "byteplus",
     }
-    assert requests[0]["method"] == "POST"
-    assert requests[0]["path"] == "contents/generations/tasks"
-    assert requests[0]["payload"] == {
+    assert requests[0].method == "POST"
+    assert requests[0].path == "contents/generations/tasks"
+    assert requests[0].payload_dict() == {
         "model": "seedance-2-0-260128",
         "content": [
             {"type": "text", "text": "make a calm ocean video"},
@@ -230,31 +312,59 @@ def test_seedance_start_polling_creates_task_without_web_search(
     }
 
 
+def test_seedance_start_polling_fails_on_invalid_task_response_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = make_model()
+
+    def fake_request_model(**kwargs: Any) -> Any:
+        return provider_response(kwargs, {"status": "queued"})
+
+    monkeypatch.setattr(model, "request_model", fake_request_model)
+
+    result = model._start_polling(
+        model="seedance-2-0-260128",
+        credentials=credentials(),
+        prompt_messages=[UserPromptMessage(content="make a calm ocean video")],
+        model_parameters={},
+        stream=False,
+        workflow_run_id="wr-1",
+        node_id="llm-1",
+    )
+
+    assert result.status == LLMPollingStatus.FAILED
+    assert result.error is not None
+    assert "Invalid Seedance task response" in result.error
+
+
 def test_seedance_check_polling_returns_video_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    model = _model()
+    model = make_model()
     monkeypatch.setattr(
         model,
-        "_usage_from_provider_payload",
+        "usage_from_provider_payload",
         lambda **_: LLMUsage.empty_usage(),
     )
 
-    def fake_request_json(**kwargs: Any) -> dict[str, Any]:
+    def fake_request_model(**kwargs: Any) -> Any:
         assert kwargs["method"] == "GET"
         assert kwargs["path"] == "contents/generations/tasks/task-1"
-        return {
-            "id": "task-1",
-            "status": "succeeded",
-            "content": {"video_url": "https://example.com/result.mp4"},
-            "usage": {"completion_tokens": 12, "total_tokens": 12},
-        }
+        return provider_response(
+            kwargs,
+            {
+                "id": "task-1",
+                "status": "succeeded",
+                "content": {"video_url": "https://example.com/result.mp4"},
+                "usage": {"completion_tokens": 12, "total_tokens": 12},
+            },
+        )
 
-    monkeypatch.setattr(model, "_request_json", fake_request_json)
+    monkeypatch.setattr(model, "request_model", fake_request_model)
 
     result = model._check_polling(
         model="seedance-2-0-260128",
-        credentials=_credentials(),
+        credentials=credentials(),
         plugin_state={"task_id": "task-1"},
         workflow_run_id="wr-1",
         node_id="llm-1",
@@ -269,21 +379,39 @@ def test_seedance_check_polling_returns_video_result(
     assert video.mime_type == "video/mp4"
 
 
-@pytest.mark.parametrize("error", [_ArkHTTPError(429, "rate limited"), URLError("timed out")])
+def test_seedance_check_polling_rejects_legacy_state_alias() -> None:
+    model = make_model()
+
+    result = model._check_polling(
+        model="seedance-2-0-260128",
+        credentials=credentials(),
+        plugin_state={"job_id": "task-1"},
+        workflow_run_id="wr-1",
+        node_id="llm-1",
+    )
+
+    assert result.status == LLMPollingStatus.FAILED
+    assert result.error is not None
+    assert "Invalid Seedance polling state" in result.error
+
+
+@pytest.mark.parametrize(
+    "error", [ArkHTTPError(429, "rate limited"), URLError("timed out")]
+)
 def test_seedance_check_polling_keeps_running_on_retryable_errors(
     monkeypatch: pytest.MonkeyPatch,
     error: Exception,
 ) -> None:
-    model = _model()
+    model = make_model()
 
-    def fake_request_json(**_: Any) -> dict[str, Any]:
+    def fake_request_model(**_: Any) -> Any:
         raise error
 
-    monkeypatch.setattr(model, "_request_json", fake_request_json)
+    monkeypatch.setattr(model, "request_model", fake_request_model)
 
     result = model._check_polling(
         model="seedance-2-0-260128",
-        credentials=_credentials(),
+        credentials=credentials(),
         plugin_state={"task_id": "task-1"},
         workflow_run_id="wr-1",
         node_id="llm-1",
@@ -295,12 +423,12 @@ def test_seedance_check_polling_keeps_running_on_retryable_errors(
 
 
 def test_seedance_15_rejects_video_input() -> None:
-    model = _model()
+    model = make_model()
 
     with pytest.raises(InvokeError, match="video and audio input is only supported"):
         model._start_polling(
             model="seedance-1-5-pro-251215",
-            credentials=_credentials(),
+            credentials=credentials(),
             prompt_messages=[
                 UserPromptMessage(
                     content=[
@@ -323,18 +451,18 @@ def test_seedance_15_rejects_video_input() -> None:
 def test_seedance_2_accepts_reference_audio(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    model = _model()
-    requests: list[dict[str, Any]] = []
+    model = make_model()
+    requests: list[CapturedRequest] = []
 
-    def fake_request_json(**kwargs: Any) -> dict[str, Any]:
-        requests.append(kwargs)
-        return {"id": "task-1", "status": "queued"}
+    def fake_request_model(**kwargs: Any) -> Any:
+        requests.append(CapturedRequest.from_kwargs(kwargs))
+        return provider_response(kwargs, {"id": "task-1", "status": "queued"})
 
-    monkeypatch.setattr(model, "_request_json", fake_request_json)
+    monkeypatch.setattr(model, "request_model", fake_request_model)
 
     result = model._start_polling(
         model="seedance-2-0-260128",
-        credentials=_credentials(),
+        credentials=credentials(),
         prompt_messages=[
             UserPromptMessage(
                 content=[
@@ -359,33 +487,37 @@ def test_seedance_2_accepts_reference_audio(
     )
 
     assert result.status == LLMPollingStatus.RUNNING
-    assert requests[0]["payload"]["content"][1]["role"] == "reference_image"
-    assert requests[0]["payload"]["content"][2]["role"] == "reference_audio"
+    payload = requests[0].payload_dict()
+    assert payload["content"][1]["role"] == "reference_image"
+    assert payload["content"][2]["role"] == "reference_audio"
 
 
 def test_seedream_start_polling_returns_b64_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    model = _model()
-    requests: list[dict[str, Any]] = []
+    model = make_model()
+    requests: list[CapturedRequest] = []
     monkeypatch.setattr(
         model,
-        "_usage_from_provider_payload",
+        "usage_from_provider_payload",
         lambda **_: LLMUsage.empty_usage(),
     )
 
-    def fake_request_json(**kwargs: Any) -> dict[str, Any]:
-        requests.append(kwargs)
-        return {
-            "model": "seedream-5-0-260128",
-            "data": [{"b64_json": "aW1hZ2U="}],
-        }
+    def fake_request_model(**kwargs: Any) -> Any:
+        requests.append(CapturedRequest.from_kwargs(kwargs))
+        return provider_response(
+            kwargs,
+            {
+                "model": "seedream-5-0-260128",
+                "data": [{"b64_json": "aW1hZ2U="}],
+            },
+        )
 
-    monkeypatch.setattr(model, "_request_json", fake_request_json)
+    monkeypatch.setattr(model, "request_model", fake_request_model)
 
     result = model._start_polling(
         model="seedream-5-0-260128",
-        credentials=_credentials(),
+        credentials=credentials(),
         prompt_messages=[UserPromptMessage(content="draw a small cabin")],
         model_parameters={
             "response_format": "b64_json",
@@ -399,11 +531,10 @@ def test_seedream_start_polling_returns_b64_image(
     )
 
     assert result.status == LLMPollingStatus.SUCCEEDED
-    assert requests[0]["payload"]["model"] == "seedream-5-0-260128"
-    assert "tools" not in requests[0]["payload"]
-    assert requests[0]["payload"]["sequential_image_generation_options"] == {
-        "max_images": 3
-    }
+    payload = requests[0].payload_dict()
+    assert payload["model"] == "seedream-5-0-260128"
+    assert "tools" not in payload
+    assert payload["sequential_image_generation_options"] == {"max_images": 3}
     assert result.result is not None
     assert isinstance(result.result.message.content, list)
     image = result.result.message.content[0]
@@ -444,16 +575,16 @@ def test_seedream_start_polling_failed_responses(
     response: dict[str, Any],
     expected_error: str,
 ) -> None:
-    model = _model()
+    model = make_model()
 
-    def fake_request_json(**_: Any) -> dict[str, Any]:
-        return response
+    def fake_request_model(**kwargs: Any) -> Any:
+        return provider_response(kwargs, response)
 
-    monkeypatch.setattr(model, "_request_json", fake_request_json)
+    monkeypatch.setattr(model, "request_model", fake_request_model)
 
     result = model._start_polling(
         model="seedream-5-0-260128",
-        credentials=_credentials(),
+        credentials=credentials(),
         prompt_messages=[UserPromptMessage(content="draw a cabin")],
         model_parameters={},
         stream=False,
@@ -488,16 +619,16 @@ def test_seedance_check_polling_failed_terminal_states(
     task_payload: dict[str, Any],
     expected_error: str,
 ) -> None:
-    model = _model()
+    model = make_model()
 
-    def fake_request_json(**_: Any) -> dict[str, Any]:
-        return task_payload
+    def fake_request_model(**kwargs: Any) -> Any:
+        return provider_response(kwargs, task_payload)
 
-    monkeypatch.setattr(model, "_request_json", fake_request_json)
+    monkeypatch.setattr(model, "request_model", fake_request_model)
 
     result = model._check_polling(
         model="seedance-2-0-260128",
-        credentials=_credentials(),
+        credentials=credentials(),
         plugin_state={"task_id": "task-1"},
         workflow_run_id="wr-1",
         node_id="llm-1",
