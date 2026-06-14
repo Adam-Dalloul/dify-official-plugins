@@ -1,10 +1,11 @@
 name: Refresh EmpirioLabs Dify models
 
-# Dify model-provider plugins cannot fetch a model list at runtime, so the
-# picker is populated from static YAML. This regenerates that YAML from the
-# public, no-auth EmpirioLabs /v1/models catalog and keeps the open PR branch
-# current automatically. No secret is needed: the catalog is public and the
-# push uses the built-in GITHUB_TOKEN to the same fork.
+# Dify model-provider plugins cannot fetch a model list at runtime (the host
+# plugin protocol has no list-models RPC and the legacy fetch-from-remote
+# method was removed), so the picker is populated from static YAML. This
+# regenerates that YAML from the public, no-auth EmpirioLabs /v1/models catalog
+# and keeps the open PR branch current automatically. No secret is needed: the
+# catalog is public and the push uses the built-in GITHUB_TOKEN to the same fork.
 
 on:
   schedule:
@@ -32,12 +33,17 @@ jobs:
         run: |
           git config user.name "Adam Dalloul"
           git config user.email "47503782+Adam-Dalloul@users.noreply.github.com"
+          if ! git ls-remote --exit-code --heads origin feat/empiriolabs-model-provider >/dev/null 2>&1; then
+            echo "PR branch no longer exists (likely merged upstream). Nothing to refresh on the fork."
+            exit 0
+          fi
           git fetch origin feat/empiriolabs-model-provider
           git checkout feat/empiriolabs-model-provider
           python "$RUNNER_TEMP/gen.py" models/empiriolabs
 
       - name: Commit and push if the catalog changed
         run: |
+          git rev-parse --abbrev-ref HEAD | grep -qx feat/empiriolabs-model-provider || exit 0
           if [ -n "$(git status --porcelain models/empiriolabs)" ]; then
             git add models/empiriolabs
             git commit -m "chore(empiriolabs): refresh model catalog from /v1/models"
