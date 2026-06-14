@@ -1,0 +1,48 @@
+name: Refresh EmpirioLabs Dify models
+
+# Dify model-provider plugins cannot fetch a model list at runtime, so the
+# picker is populated from static YAML. This regenerates that YAML from the
+# public, no-auth EmpirioLabs /v1/models catalog and keeps the open PR branch
+# current automatically. No secret is needed: the catalog is public and the
+# push uses the built-in GITHUB_TOKEN to the same fork.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main (holds the generator script)
+        uses: actions/checkout@v4
+
+      - name: Stash the generator outside the worktree
+        run: cp .github/scripts/gen_empiriolabs_dify_models.py "$RUNNER_TEMP/gen.py"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Switch to the PR branch and regenerate model YAMLs
+        run: |
+          git config user.name "Adam Dalloul"
+          git config user.email "47503782+Adam-Dalloul@users.noreply.github.com"
+          git fetch origin feat/empiriolabs-model-provider
+          git checkout feat/empiriolabs-model-provider
+          python "$RUNNER_TEMP/gen.py" models/empiriolabs
+
+      - name: Commit and push if the catalog changed
+        run: |
+          if [ -n "$(git status --porcelain models/empiriolabs)" ]; then
+            git add models/empiriolabs
+            git commit -m "chore(empiriolabs): refresh model catalog from /v1/models"
+            git push origin feat/empiriolabs-model-provider
+            echo "pushed model refresh"
+          else
+            echo "no model changes"
+          fi
