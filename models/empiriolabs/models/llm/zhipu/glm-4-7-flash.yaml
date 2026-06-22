@@ -1,6 +1,6 @@
 model: glm-4-7-flash
 label:
-  en_US: GLM-4.7 Flash
+  en_US: GLM 4.7 Flash
 model_type: llm
 features:
   - agent-thought

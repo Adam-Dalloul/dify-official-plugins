@@ -2,6 +2,8 @@ model: magistral-medium-2509-thinking
 label:
   en_US: Magistral Medium 2509 Thinking
 model_type: llm
+features:
+  - agent-thought
 model_properties:
   mode: chat
   context_size: 40000
@@ -28,6 +30,25 @@ parameter_rules:
     options:
       - text
       - json_object
+  - name: enable_thinking
+    label:
+      en_US: Enable Thinking
+    type: boolean
+    default: false
+    required: false
+    help:
+      en_US: Enable step-by-step reasoning for the model.
+  - name: reasoning_effort
+    label:
+      en_US: Reasoning Effort
+    type: string
+    required: false
+    options:
+      - none
+      - low
+      - medium
+      - high
+      - max
 pricing:
   input: '2.6'
   output: '6.5'
