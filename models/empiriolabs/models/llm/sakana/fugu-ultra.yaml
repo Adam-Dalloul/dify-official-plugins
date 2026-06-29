@@ -1,0 +1,60 @@
+model: fugu-ultra
+label:
+  en_US: Fugu Ultra
+model_type: llm
+features:
+  - agent-thought
+  - vision
+  - tool-call
+  - multi-tool-call
+  - stream-tool-call
+model_properties:
+  mode: chat
+  context_size: 1000000
+parameter_rules:
+  - name: temperature
+    use_template: temperature
+  - name: top_p
+    use_template: top_p
+  - name: max_tokens
+    use_template: max_tokens
+    type: int
+    default: 1024
+    min: 1
+    max: 131072
+  - name: frequency_penalty
+    use_template: frequency_penalty
+  - name: presence_penalty
+    use_template: presence_penalty
+  - name: response_format
+    label:
+      en_US: Response Format
+    type: string
+    required: false
+    options:
+      - text
+      - json_object
+  - name: enable_thinking
+    label:
+      en_US: Enable Thinking
+    type: boolean
+    default: false
+    required: false
+    help:
+      en_US: Enable step-by-step reasoning for the model.
+  - name: reasoning_effort
+    label:
+      en_US: Reasoning Effort
+    type: string
+    required: false
+    options:
+      - none
+      - low
+      - medium
+      - high
+      - max
+pricing:
+  input: '7.5'
+  output: '45'
+  unit: '0.000001'
+  currency: USD
