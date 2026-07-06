@@ -38,10 +38,9 @@
 - deepseek-v4-flash
 - deepseek-v4-pro
 
-# google models (3)
+# google models (2)
 - gemma-3-27b
 - gemma-4-26b-a4b
-- gemma-4-e4b
 
 # minimax models (3)
 - minimax-m2-7
@@ -66,10 +65,9 @@
 # winfunc models (1)
 - deepreasoning
 
-# xiaomi models (3)
+# xiaomi models (2)
 - mimo-v2-5
 - mimo-v2-5-pro
-- mimo-v2-flash
 
 # zhipu models (5)
 - glm-4-5-flash
