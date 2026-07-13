@@ -42,6 +42,9 @@
 - gemma-3-27b
 - gemma-4-26b-a4b
 
+# meta models (1)
+- muse-spark-1-1
+
 # minimax models (3)
 - minimax-m2-7
 - minimax-m2-7-highspeed
@@ -61,6 +64,12 @@
 
 # sakana models (1)
 - fugu-ultra
+
+# stepfun models (4)
+- step-3-5-flash
+- step-3-5-flash-2603
+- step-3-7-flash
+- stepaudio-2-5-chat
 
 # winfunc models (1)
 - deepreasoning

@@ -3,9 +3,13 @@ label:
   en_US: MiMo V2.5
 model_type: llm
 features:
+  - agent-thought
   - vision
   - video
   - audio
+  - tool-call
+  - multi-tool-call
+  - stream-tool-call
 model_properties:
   mode: chat
   context_size: 1000000
@@ -32,6 +36,25 @@ parameter_rules:
     options:
       - text
       - json_object
+  - name: enable_thinking
+    label:
+      en_US: Enable Thinking
+    type: boolean
+    default: false
+    required: false
+    help:
+      en_US: Enable step-by-step reasoning for the model.
+  - name: reasoning_effort
+    label:
+      en_US: Reasoning Effort
+    type: string
+    required: false
+    options:
+      - none
+      - low
+      - medium
+      - high
+      - max
 pricing:
   input: '0.7'
   output: '1.4'
