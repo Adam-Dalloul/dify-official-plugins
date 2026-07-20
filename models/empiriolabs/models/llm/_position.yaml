@@ -26,11 +26,12 @@
 - nova-premier-1-0
 - nova-pro-1-0
 
-# bytedance models (4)
+# bytedance models (5)
 - seed-2-0-code
 - seed-2-0-lite
 - seed-2-0-mini
 - seed-2-0-pro
+- seed-2-1-turbo
 
 # deepseek models (4)
 - deepseek-prover-v2
@@ -57,10 +58,11 @@
 - mistral-small-3-1
 - mistral-small-4
 
-# moonshot models (3)
+# moonshot models (4)
 - kimi-k2-6
 - kimi-k2-7-code
 - kimi-k2-7-code-highspeed
+- kimi-k3
 
 # sakana models (1)
 - fugu-ultra
