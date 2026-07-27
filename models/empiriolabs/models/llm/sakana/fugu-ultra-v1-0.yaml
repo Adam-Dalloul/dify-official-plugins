@@ -1,6 +1,6 @@
-model: fugu-ultra
+model: fugu-ultra-v1-0
 label:
-  en_US: Fugu Ultra
+  en_US: Fugu Ultra v1.0
 model_type: llm
 features:
   - agent-thought
