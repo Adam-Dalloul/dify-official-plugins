@@ -1,15 +1,17 @@
-model: magistral-medium-2509-thinking
+model: qwen3-8-max
 label:
-  en_US: Magistral Medium 2509 Thinking
+  en_US: Qwen3.8 Max
 model_type: llm
 features:
   - agent-thought
+  - vision
+  - video
   - tool-call
   - multi-tool-call
   - stream-tool-call
 model_properties:
   mode: chat
-  context_size: 40000
+  context_size: 1000000
 parameter_rules:
   - name: temperature
     use_template: temperature
@@ -20,7 +22,7 @@ parameter_rules:
     type: int
     default: 1024
     min: 1
-    max: 40000
+    max: 131072
   - name: frequency_penalty
     use_template: frequency_penalty
   - name: presence_penalty
@@ -53,7 +55,7 @@ parameter_rules:
       - high
       - max
 pricing:
-  input: '2.6'
-  output: '6.5'
+  input: '2'
+  output: '6'
   unit: '0.000001'
   currency: USD
