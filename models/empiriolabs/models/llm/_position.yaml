@@ -36,8 +36,7 @@
 - seed-2-0-pro
 - seed-2-1-turbo
 
-# deepseek models (5)
-- deepseek-prover-v2
+# deepseek models (4)
 - deepseek-v3-2
 - deepseek-v4-flash
 - deepseek-v4-flash-0731
@@ -47,8 +46,9 @@
 - gemma-3-27b
 - gemma-4-26b-a4b
 
-# meta models (1)
+# meta models (2)
 - muse-spark-1-1
+- muse-spark-1-2
 
 # minimax models (3)
 - minimax-m2-7
