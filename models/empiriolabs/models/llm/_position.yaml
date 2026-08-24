@@ -87,9 +87,10 @@
 - mimo-v2-5
 - mimo-v2-5-pro
 
-# zhipu models (5)
+# zhipu models (6)
 - glm-4-5-flash
 - glm-4-6v-flash
 - glm-4-7-flash
 - glm-5-1
 - glm-5-2
+- glm-5-3
