@@ -1,15 +1,17 @@
-model: mistral-medium-3-1
+model: muse-spark-1-3
 label:
-  en_US: Mistral Medium 3.1
+  en_US: Muse Spark 1.3
 model_type: llm
 features:
+  - agent-thought
   - vision
+  - video
   - tool-call
   - multi-tool-call
   - stream-tool-call
 model_properties:
   mode: chat
-  context_size: 131000
+  context_size: 1048576
 parameter_rules:
   - name: temperature
     use_template: temperature
@@ -20,7 +22,7 @@ parameter_rules:
     type: int
     default: 1024
     min: 1
-    max: 40000
+    max: 131072
   - name: frequency_penalty
     use_template: frequency_penalty
   - name: presence_penalty
@@ -33,8 +35,27 @@ parameter_rules:
     options:
       - text
       - json_object
+  - name: enable_thinking
+    label:
+      en_US: Enable Thinking
+    type: boolean
+    default: false
+    required: false
+    help:
+      en_US: Enable step-by-step reasoning for the model.
+  - name: reasoning_effort
+    label:
+      en_US: Reasoning Effort
+    type: string
+    required: false
+    options:
+      - none
+      - low
+      - medium
+      - high
+      - max
 pricing:
-  input: '0.52'
-  output: '2.6'
+  input: '1.25'
+  output: '4.25'
   unit: '0.000001'
   currency: USD
