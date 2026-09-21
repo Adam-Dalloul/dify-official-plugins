@@ -1,12 +1,17 @@
-model: stepaudio-2-5-chat
+model: step-5-preview
 label:
-  en_US: StepAudio 2.5 Chat
+  en_US: Step 5 Preview
 model_type: llm
 features:
-  - audio
+  - agent-thought
+  - vision
+  - video
+  - tool-call
+  - multi-tool-call
+  - stream-tool-call
 model_properties:
   mode: chat
-  context_size: 256000
+  context_size: 1024000
 parameter_rules:
   - name: temperature
     use_template: temperature
@@ -30,8 +35,27 @@ parameter_rules:
     options:
       - text
       - json_object
+  - name: enable_thinking
+    label:
+      en_US: Enable Thinking
+    type: boolean
+    default: false
+    required: false
+    help:
+      en_US: Enable step-by-step reasoning for the model.
+  - name: reasoning_effort
+    label:
+      en_US: Reasoning Effort
+    type: string
+    required: false
+    options:
+      - none
+      - low
+      - medium
+      - high
+      - max
 pricing:
-  input: '1.5'
-  output: '3.5'
+  input: '1'
+  output: '2.7'
   unit: '0.000001'
   currency: USD
