@@ -89,9 +89,12 @@
 # winfunc models (1)
 - deepreasoning
 
-# xiaomi models (2)
+# xiaomi models (5)
 - mimo-v2-5
 - mimo-v2-5-pro
+- mimo-v2-6-flash
+- mimo-v2-6-pro
+- mimo-v2-6-pro-ultraspeed
 
 # zhipu models (7)
 - glm-4-5-flash
