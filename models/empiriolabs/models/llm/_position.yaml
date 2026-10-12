@@ -1,4 +1,4 @@
-# alibaba models (26)
+# alibaba models (22)
 - qwen3-5-122b-a10b
 - qwen3-5-27b
 - qwen3-5-35b-a3b
@@ -12,7 +12,6 @@
 - qwen3-6-27b
 - qwen3-6-35b-a3b
 - qwen3-6-flash
-- qwen3-6-max-preview
 - qwen3-6-plus
 - qwen3-7-flash
 - qwen3-7-max
@@ -22,9 +21,6 @@
 - qwen3-8-max
 - qwen3-8-max-0902
 - qwen3-8-omni-flash
-- qwen3-max
-- qwen3-max-preview
-- qwen3-max-thinking
 
 # amazon models (4)
 - nova-lite-1-0
@@ -39,10 +35,8 @@
 - seed-2-0-pro
 - seed-2-1-turbo
 
-# deepseek models (6)
-- deepseek-v3-2
+# deepseek models (4)
 - deepseek-v4-1-flash
-- deepseek-v4-flash
 - deepseek-v4-flash-0731
 - deepseek-v4-pro
 - deepseek-v4-pro-0813
